@@ -7,6 +7,10 @@ diesel::table! {
         stripe_account_id -> Nullable<Text>,
         created_at -> Nullable<Timestamptz>,
         updated_at -> Nullable<Timestamptz>,
+        stripe_onboarding_complete -> Nullable<Bool>,
+        stripe_charges_enabled -> Nullable<Bool>,
+        stripe_payouts_enabled -> Nullable<Bool>,
+        stripe_account_status -> Nullable<Text>,
     }
 }
 
@@ -36,6 +40,8 @@ diesel::table! {
         donor_name -> Nullable<Text>,
         metadata -> Nullable<Jsonb>,
         created_at -> Nullable<Timestamptz>,
+        stripe_transfer_id -> Nullable<Text>,
+        platform_fee_cents -> Nullable<Int8>,
     }
 }
 
@@ -61,7 +67,17 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    stripe_webhook_events (id) {
+        id -> Uuid,
+        stripe_event_id -> Text,
+        event_type -> Text,
+        processed_at -> Timestamptz,
+        payload -> Jsonb,
+    }
+}
+
 diesel::joinable!(campaigns -> organizations (organization_id));
 diesel::joinable!(donations -> campaigns (campaign_id));
 
-diesel::allow_tables_to_appear_in_same_query!(organizations, campaigns, donations, users, sessions);
+diesel::allow_tables_to_appear_in_same_query!(organizations, campaigns, donations, users, sessions, stripe_webhook_events);

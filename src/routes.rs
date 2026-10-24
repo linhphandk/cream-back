@@ -4,6 +4,7 @@ use axum::Router;
 
 use crate::auth;
 use crate::onboarding;
+use crate::stripe;
 use crate::auth::service::CreamAuthService;
 use crate::config::Settings;
 use crate::shared::db::DbPool;
@@ -26,9 +27,11 @@ pub fn auth_state(pool: DbPool, settings: &Settings) -> Arc<CreamAuthService> {
 pub fn routes(
     auth_service: Arc<CreamAuthService>,
     onboarding: onboarding::controller::OnboardingAppState,
+    stripe: Arc<stripe::service::StripeService>,
 ) -> Router {
     Router::new()
         .route("/health", axum::routing::get(|| async { "healthy" }))
         .merge(auth::router(auth_service))
         .merge(onboarding::router(onboarding))
+        .merge(stripe::controller::router(stripe))
 }

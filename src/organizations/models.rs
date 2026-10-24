@@ -14,6 +14,10 @@ pub struct Organization {
     pub stripe_account_id: Option<String>,
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
+    pub stripe_onboarding_complete: Option<bool>,
+    pub stripe_charges_enabled: Option<bool>,
+    pub stripe_payouts_enabled: Option<bool>,
+    pub stripe_account_status: Option<String>,
 }
 
 #[derive(Insertable)]

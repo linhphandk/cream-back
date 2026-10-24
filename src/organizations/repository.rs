@@ -1,3 +1,4 @@
+use uuid::Uuid;
 use diesel::prelude::*;
 use tracing::instrument;
 
@@ -47,5 +48,74 @@ impl OrgRepository {
                 _ => AppError::Internal,
             }
         })
+    }
+
+    #[instrument(skip(self), fields(subdomain = %sub))]
+    pub async fn find_by_subdomain(&self, sub: &str) -> AppResult<Option<Organization>> {
+        use crate::schema::organizations::dsl::*;
+        let mut conn = self.pool.get().map_err(|_| AppError::Internal)?;
+
+        organizations
+            .filter(subdomain.eq(sub))
+            .first::<Organization>(&mut conn)
+            .optional()
+            .map_err(|e| {
+                tracing::error!("org by subdomain: {:?}", e);
+                AppError::Internal
+            })
+    }
+
+    pub async fn find_by_id(&self, org_id: Uuid) -> AppResult<Option<Organization>> {
+        use crate::schema::organizations::dsl::*;
+        let mut conn = self.pool.get().map_err(|_| AppError::Internal)?;
+
+        organizations
+            .filter(id.eq(org_id))
+            .first::<Organization>(&mut conn)
+            .optional()
+            .map_err(|e| {
+                tracing::error!("org by id: {:?}", e);
+                AppError::Internal
+            })
+    }
+
+    pub async fn update_stripe_account_id(&self, org_id: Uuid, account_id: String) -> AppResult<()> {
+        use crate::schema::organizations::dsl::*;
+        let mut conn = self.pool.get().map_err(|_| AppError::Internal)?;
+
+        diesel::update(organizations.filter(id.eq(org_id)))
+            .set(stripe_account_id.eq(account_id))
+            .execute(&mut conn)
+            .map_err(|e| {
+                tracing::error!("update stripe account id: {:?}", e);
+                AppError::Internal
+            })?;
+        Ok(())
+    }
+
+    pub async fn update_stripe_status(
+        &self,
+        org_id: Uuid,
+        charges_enabled: bool,
+        payouts_enabled: bool,
+        onboarding_complete: bool,
+        status: &str,
+    ) -> AppResult<()> {
+        use crate::schema::organizations::dsl::*;
+        let mut conn = self.pool.get().map_err(|_| AppError::Internal)?;
+
+        diesel::update(organizations.filter(id.eq(org_id)))
+            .set((
+                stripe_charges_enabled.eq(charges_enabled),
+                stripe_payouts_enabled.eq(payouts_enabled),
+                stripe_onboarding_complete.eq(onboarding_complete),
+                stripe_account_status.eq(status),
+            ))
+            .execute(&mut conn)
+            .map_err(|e| {
+                tracing::error!("update stripe status: {:?}", e);
+                AppError::Internal
+            })?;
+        Ok(())
     }
 }
