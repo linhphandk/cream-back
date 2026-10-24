@@ -5,7 +5,6 @@ use axum::Router;
 use crate::auth;
 use crate::auth::service::CreamAuthService;
 use crate::config::Settings;
-use crate::organizations;
 use crate::shared::db::DbPool;
 
 pub fn auth_state(pool: DbPool, settings: &Settings) -> Arc<CreamAuthService> {
