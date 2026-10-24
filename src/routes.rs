@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::Router;
 
 use crate::auth;
-use crate::organizations;
+use crate::onboarding;
 use crate::auth::service::CreamAuthService;
 use crate::config::Settings;
 use crate::shared::db::DbPool;
@@ -25,10 +25,10 @@ pub fn auth_state(pool: DbPool, settings: &Settings) -> Arc<CreamAuthService> {
 
 pub fn routes(
     auth_service: Arc<CreamAuthService>,
-    org_state: organizations::OrgState,
+    onboarding: onboarding::controller::OnboardingAppState,
 ) -> Router {
     Router::new()
         .route("/health", axum::routing::get(|| async { "healthy" }))
         .merge(auth::router(auth_service))
-        .merge(organizations::router(org_state))
+        .merge(onboarding::router(onboarding))
 }

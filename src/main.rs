@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod onboarding;
 mod organizations;
 mod routes;
 mod schema;
@@ -27,11 +28,14 @@ async fn main() {
     let pool = shared::db::establish_pool(&settings.database_url, settings.db_pool_size);
 
     let auth_service = routes::auth_state(pool.clone(), &settings);
-    let org_service: organizations::OrgState = Arc::new(organizations::service::OrganizationService::new(
+    let org_service = Arc::new(organizations::service::OrganizationService::new(
         organizations::repository::OrgRepository::new(pool),
     ));
+    let onboarding: onboarding::controller::OnboardingAppState = Arc::new(
+        onboarding::service::OnboardingService::new(org_service),
+    );
 
-    let app = routes::routes(auth_service, org_service);
+    let app = routes::routes(auth_service, onboarding);
 
     let addr = "0.0.0.0:3000";
     let listener = tokio::net::TcpListener::bind(addr)
