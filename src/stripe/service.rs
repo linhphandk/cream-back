@@ -64,7 +64,7 @@ impl StripeService {
         self.org_repo.update_stripe_account_id(org_id, account_resp.id.clone()).await?;
 
         // Build onboarding URL
-        let onboarding_url = format!("https://connect.stripe.com/onboard/{}", session_resp.client_secret);
+        let onboarding_url = session_resp.url;
 
         Ok((account_resp.id, onboarding_url))
     }

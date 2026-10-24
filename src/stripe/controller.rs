@@ -1,6 +1,7 @@
 use axum::{
-    extract::{State, Path, Json},
-    http::StatusCode,
+    extract::{State, Path, Json, Query},
+    http::{StatusCode, HeaderMap},
+    response::{Redirect, IntoResponse},
     routing::{post, get},
     Router,
 };
@@ -83,12 +84,53 @@ pub async fn refresh_onboarding(
         .ok_or_else(|| AppError::BadRequest("Stripe account not created yet".to_string()))?;
 
     let session_resp = state.client.create_account_session(&account_id, &state.frontend_base, org_id).await?;
-    let onboarding_url = format!("https://connect.stripe.com/onboard/{}", session_resp.client_secret);
+    let onboarding_url = session_resp.url;
 
     Ok(Json(CreateOnboardingResponse {
         account_id,
         onboarding_url,
     }))
+}
+
+/// Stripe redirects here after onboarding completes
+/// Query params: org_id (from our return_url)
+#[derive(Deserialize)]
+pub struct ReturnParams {
+    pub org_id: Uuid,
+}
+
+/// Frontend success/error page URLs
+fn frontend_success_url(frontend_base: &str, org_id: Uuid) -> String {
+    format!("{}/onboarding/success?org_id={}", frontend_base, org_id)
+}
+
+fn frontend_error_url(frontend_base: &str, org_id: Uuid) -> String {
+    format!("{}/onboarding/error?org_id={}", frontend_base, org_id)
+}
+
+/// Stripe onboarding return handler
+/// Called when user completes onboarding and is redirected back
+pub async fn onboarding_return(
+    State(state): State<StripeState>,
+    Query(params): Query<ReturnParams>,
+) -> impl IntoResponse {
+    let org_id = params.org_id;
+    let frontend_base = state.frontend_base.clone();
+
+    // Check onboarding status
+    match state.check_onboarding_status(org_id).await {
+        Ok(status) if status.onboarding_complete => {
+            Redirect::to(&frontend_success_url(&frontend_base, org_id)).into_response()
+        }
+        Ok(_) => {
+            // Not complete yet - redirect to error page, frontend can poll
+            Redirect::to(&frontend_error_url(&frontend_base, org_id)).into_response()
+        }
+        Err(e) => {
+            tracing::error!(org_id = %org_id, error = %e, "Onboarding status check failed");
+            Redirect::to(&frontend_error_url(&frontend_base, org_id)).into_response()
+        }
+    }
 }
 
 /// Create a donation PaymentIntent
@@ -122,6 +164,7 @@ pub fn router(state: StripeState) -> Router {
         .route("/onboarding/stripe/create", post(create_onboarding))
         .route("/onboarding/stripe/status/{org_id}", get(onboarding_status))
         .route("/onboarding/stripe/refresh/{org_id}", post(refresh_onboarding))
+        .route("/onboarding/stripe/return", get(onboarding_return))
         .route("/orgs/{subdomain}/donate", post(create_donation))
         .route("/orgs/{subdomain}/donate/{donation_id}", get(donation_status))
         .with_state(state)
