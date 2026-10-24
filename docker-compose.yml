@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: cream
       POSTGRES_DB: cream
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - cream_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: adminer:latest
     container_name: cream-adminer
     ports:
-      - "8081:8080"
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
