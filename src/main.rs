@@ -27,12 +27,11 @@ async fn main() {
     let pool = shared::db::establish_pool(&settings.database_url, settings.db_pool_size);
 
     let auth_service = routes::auth_state(pool.clone(), &settings);
-    // org service: used internally (onboarding creates org + silent default campaign)
-    let _org_service = Arc::new(organizations::service::OrganizationService::new(
+    let org_service: organizations::OrgState = Arc::new(organizations::service::OrganizationService::new(
         organizations::repository::OrgRepository::new(pool),
     ));
 
-    let app = routes::routes(auth_service);
+    let app = routes::routes(auth_service, org_service);
 
     let addr = "0.0.0.0:3000";
     let listener = tokio::net::TcpListener::bind(addr)
