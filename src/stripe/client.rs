@@ -143,8 +143,7 @@ impl StripeClient {
             "configuration": {
                 "merchant": {
                     "capabilities": {
-                        "card_payments": { "requested": true },
-                        "stripe_balance.payouts": { "requested": true }
+                        "card_payments": { "requested": true }
                     }
                 }
             },
@@ -167,18 +166,19 @@ impl StripeClient {
         let return_url = format!("{}/onboarding/stripe/return?org_id={}", frontend_base, org_id);
         let refresh_url = format!("{}/onboarding/stripe/refresh?org_id={}", frontend_base, org_id);
 
+        // v2 hosted onboarding is an Account Link; return/refresh urls live here, not in /account_sessions
         let body = serde_json::json!({
             "account": account_id,
-            "components": {
+            "use_case": {
+                "type": "account_onboarding",
                 "account_onboarding": {
-                    "enabled": true,
                     "return_url": return_url,
                     "refresh_url": refresh_url
                 }
             }
         });
 
-        let resp: CreateAccountSessionResponse = self.post_v2("/account_sessions", &body).await?;
+        let resp: CreateAccountSessionResponse = self.post_v2("/account_links", &body).await?;
         Ok(resp)
     }
 
@@ -313,7 +313,7 @@ pub struct AccountRequirements {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateAccountSessionResponse {
-    pub client_secret: String,
+    pub url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -341,7 +341,7 @@ pub struct MerchantCapabilities {
     #[serde(rename = "card_payments")]
     pub card_payments: CapabilityStatus,
     #[serde(rename = "stripe_balance.payouts")]
-    pub payouts: CapabilityStatus,
+    pub payouts: Option<CapabilityStatus>,
 }
 
 #[derive(Debug, Deserialize)]
