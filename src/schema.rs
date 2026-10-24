@@ -39,7 +39,29 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    users (id) {
+        id -> Uuid,
+        email -> Text,
+        name -> Text,
+        password_hash -> Text,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    sessions (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        #[max_length = 255]
+        refresh_token -> Varchar,
+        expires_at -> Timestamp,
+        created_at -> Timestamp,
+    }
+}
+
 diesel::joinable!(campaigns -> organizations (organization_id));
 diesel::joinable!(donations -> campaigns (campaign_id));
 
-diesel::allow_tables_to_appear_in_same_query!(organizations, campaigns, donations);
+diesel::allow_tables_to_appear_in_same_query!(organizations, campaigns, donations, users, sessions);

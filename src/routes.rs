@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 use axum::Router;
 
-pub fn routes() -> Router {
-    Router::new().route("/health", axum::routing::get(|| async { "healthy" }))
+use crate::auth;
+
+pub fn routes(auth_service: Arc<auth::service::CreamAuthService>) -> axum::Router {
+    Router::new().merge(auth::router(auth_service))
 }
