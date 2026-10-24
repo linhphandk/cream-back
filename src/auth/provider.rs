@@ -2,9 +2,8 @@ use async_trait::async_trait;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-use crate::auth::models::UserInfo;
+use crate::auth::models::{Tokens, UserInfo};
 use crate::auth::ports::AuthProvider;
 use crate::shared::errors::{AppError, AppResult};
 
@@ -18,7 +17,6 @@ pub struct LocalAuthProvider {
 pub struct Claims {
     pub sub: String,
     pub email: String,
-    pub organization_id: Option<String>,
     pub exp: usize,
 }
 
@@ -30,12 +28,7 @@ impl LocalAuthProvider {
         }
     }
 
-    pub fn generate_access_token(
-        &self,
-        user_id: &str,
-        email: &str,
-        organization_id: Option<Uuid>,
-    ) -> AppResult<String> {
+    fn generate_access_token(&self, user_id: &str, email: &str) -> AppResult<String> {
         let exp = Utc::now()
             .checked_add_signed(Duration::minutes(self.access_token_expiry_minutes as i64))
             .ok_or(AppError::Internal)?
@@ -44,7 +37,6 @@ impl LocalAuthProvider {
         let claims = Claims {
             sub: user_id.to_string(),
             email: email.to_string(),
-            organization_id: organization_id.map(|id| id.to_string()),
             exp,
         };
 
@@ -76,6 +68,16 @@ impl AuthProvider for LocalAuthProvider {
         })
     }
 
+    async fn issue_tokens(&self, user: &UserInfo) -> AppResult<Tokens> {
+        let access_token = self.generate_access_token(&user.sub, &user.email)?;
+
+        Ok(Tokens {
+            access_token,
+            expires_in: self.access_token_expiry_minutes * 60,
+            refresh_token: None,
+        })
+    }
+
     async fn introspect_token(&self, token: &str) -> AppResult<UserInfo> {
         let token_data = decode::<Claims>(
             token,
@@ -90,16 +92,15 @@ impl AuthProvider for LocalAuthProvider {
         Ok(UserInfo {
             sub: token_data.claims.sub,
             email: token_data.claims.email,
-            name: String::new(),
-            organization_id: token_data
-                .claims
-                .organization_id
-                .and_then(|s| s.parse::<Uuid>().ok()),
             password_hash: String::new(),
         })
     }
 
     fn token_expiry_seconds(&self) -> u64 {
         self.access_token_expiry_minutes * 60
+    }
+
+    fn jwt_secret(&self) -> &str {
+        &self.jwt_secret
     }
 }
