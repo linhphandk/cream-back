@@ -1,42 +1,59 @@
-mod config;
 mod auth;
-mod routes;
 mod schema;
 mod shared;
+mod config;
+mod routes;
 
-use axum::Router;
-use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager, Pool};
+use std::sync::Arc;
 
 use config::Settings;
+use tracing::info;
 
-type DbPool = Pool<ConnectionManager<PgConnection>>;
-
-fn setup_database(database_url: &str) -> DbPool {
-    let manager = ConnectionManager::<PgConnection>::new(database_url);
-    Pool::builder().build(manager).expect("FAILED to create DB pool")
-}
+use crate::shared::db::{establish_pool, DbPool};
 
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "cream_back=debug,tower_http=debug".parse().unwrap()),
+        )
+        .init();
 
-    let settings = envy::from_env::<Settings>().expect("FAILED to read env vars");
+    info!("starting cream-back");
 
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let _pool = setup_database(&database_url);
+    let config_state: Settings = envy::from_env().unwrap();
 
-    let app = routes::routes();
+    let pool = establish_pool(&config_state.database_url, config_state.db_pool_size);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+    let auth_service = build_auth_service(pool, &config_state);
+
+    let app = routes::routes(auth_service);
+
+    let addr = "0.0.0.0:3000";
+    let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .expect("FAILED to bind");
+        .expect("failed to bind");
+    info!(addr, "serving");
 
-    tracing::info!("listening on 0.0.0.0:3000");
+    axum::serve(listener, app).await.unwrap();
+}
 
-    axum::serve(listener, app)
-        .await
-        .expect("FAILED to serve");
-
-    let _ = settings;
+fn build_auth_service(
+    pool: DbPool,
+    config_state: &Settings,
+) -> Arc<crate::auth::service::CreamAuthService> {
+    let auth_provider = crate::auth::provider::LocalAuthProvider::new(
+        config_state.jwt_secret.clone(),
+        config_state.jwt_expiry_minutes as u64,
+    );
+    let user_repo = crate::auth::repository::DieselUserRepository::new(pool.clone());
+    let session_repo = crate::auth::repository::DieselSessionRepository::new(pool);
+    Arc::new(crate::auth::service::AuthService::new(
+        auth_provider,
+        user_repo,
+        session_repo,
+        7,
+    ))
 }
