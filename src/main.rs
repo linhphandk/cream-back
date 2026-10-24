@@ -1,15 +1,15 @@
 mod auth;
+mod config;
+mod organizations;
+mod routes;
 mod schema;
 mod shared;
-mod config;
-mod routes;
 
 use std::sync::Arc;
 
-use config::Settings;
 use tracing::info;
 
-use crate::shared::db::{establish_pool, DbPool};
+use crate::config::Settings;
 
 #[tokio::main]
 async fn main() {
@@ -23,11 +23,14 @@ async fn main() {
 
     info!("starting cream-back");
 
-    let config_state: Settings = envy::from_env().unwrap();
+    let settings: Settings = envy::from_env().unwrap();
+    let pool = shared::db::establish_pool(&settings.database_url, settings.db_pool_size);
 
-    let pool = establish_pool(&config_state.database_url, config_state.db_pool_size);
-
-    let auth_service = build_auth_service(pool, &config_state);
+    let auth_service = routes::auth_state(pool.clone(), &settings);
+    // org service: used internally (onboarding creates org + silent default campaign)
+    let _org_service = Arc::new(organizations::service::OrganizationService::new(
+        organizations::repository::OrgRepository::new(pool),
+    ));
 
     let app = routes::routes(auth_service);
 
@@ -38,22 +41,4 @@ async fn main() {
     info!(addr, "serving");
 
     axum::serve(listener, app).await.unwrap();
-}
-
-fn build_auth_service(
-    pool: DbPool,
-    config_state: &Settings,
-) -> Arc<crate::auth::service::CreamAuthService> {
-    let auth_provider = crate::auth::provider::LocalAuthProvider::new(
-        config_state.jwt_secret.clone(),
-        config_state.jwt_expiry_minutes as u64,
-    );
-    let user_repo = crate::auth::repository::DieselUserRepository::new(pool.clone());
-    let session_repo = crate::auth::repository::DieselSessionRepository::new(pool);
-    Arc::new(crate::auth::service::AuthService::new(
-        auth_provider,
-        user_repo,
-        session_repo,
-        7,
-    ))
 }
