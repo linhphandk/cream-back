@@ -22,6 +22,8 @@ fn setup_database(database_url: &str) -> DbPool {
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
     let settings = envy::from_env::<Settings>().expect("FAILED to read env vars");
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
