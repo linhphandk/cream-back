@@ -69,6 +69,23 @@ pub struct NewCampaign {
     pub active: Option<bool>,
 }
 
+#[derive(Queryable, Selectable, Clone, Debug)]
+#[diesel(table_name = crate::schema::organization_members)]
+pub struct OrganizationMember {
+    pub org_id: Uuid,
+    pub user_id: Uuid,
+    pub role: String,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = crate::schema::organization_members)]
+pub struct NewOrganizationMember {
+    pub org_id: Uuid,
+    pub user_id: Uuid,
+    pub role: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateCampaignRequest {
     pub slug: String,

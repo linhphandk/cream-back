@@ -15,7 +15,7 @@ impl OrganizationService {
     }
 
     #[instrument(skip(self, req), fields(subdomain = %req.subdomain))]
-    pub async fn create(&self, req: CreateOrganizationRequest) -> AppResult<Organization> {
+    pub async fn create(&self, req: CreateOrganizationRequest, owner_id: Uuid) -> AppResult<Organization> {
         let (name, subdomain) = validate(&req.name, &req.subdomain)?;
 
         let org = NewOrganization {
@@ -37,8 +37,16 @@ impl OrganizationService {
             active: Some(true),
         };
 
-        let (org, _) = self.org_repo.create(org, campaign).await?;
+        let (org, _) = self.org_repo.create(org, campaign, owner_id).await?;
         Ok(org)
+    }
+
+    pub async fn find_by_member(&self, user_id: Uuid) -> AppResult<Option<Organization>> {
+        self.org_repo.find_by_member(user_id).await
+    }
+
+    pub async fn find_by_subdomain(&self, sub: &str) -> AppResult<Option<Organization>> {
+        self.org_repo.find_by_subdomain(sub).await
     }
 }
 

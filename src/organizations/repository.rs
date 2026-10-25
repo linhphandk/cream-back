@@ -2,7 +2,10 @@ use uuid::Uuid;
 use diesel::prelude::*;
 use tracing::instrument;
 
-use crate::organizations::models::{Campaign, NewCampaign, NewOrganization, Organization};
+use crate::organizations::models::{
+    Campaign, NewCampaign, NewOrganization, NewOrganizationMember, Organization,
+    OrganizationMember,
+};
 use crate::shared::errors::{AppError, AppResult};
 
 #[derive(Clone)]
@@ -20,6 +23,7 @@ impl OrgRepository {
         &self,
         org: NewOrganization,
         default_campaign: NewCampaign,
+        owner_id: Uuid,
     ) -> AppResult<(Organization, Campaign)> {
         let mut conn = self.pool.get().map_err(|e| {
             tracing::error!("pool error: {:?}", e);
@@ -36,6 +40,15 @@ impl OrgRepository {
                 .values(&default_campaign)
                 .get_result(conn)?;
 
+            let member = NewOrganizationMember {
+                org_id: org.id,
+                user_id: owner_id,
+                role: "owner".to_string(),
+            };
+            diesel::insert_into(crate::schema::organization_members::table)
+                .values(&member)
+                .execute(conn)?;
+
             Ok((org, campaign))
         })
         .map_err(|e| {
@@ -43,11 +56,57 @@ impl OrgRepository {
             match e {
                 diesel::result::Error::DatabaseError(
                     diesel::result::DatabaseErrorKind::UniqueViolation,
-                    _,
-                ) => AppError::Conflict("subdomain already taken".to_string()),
+                    info,
+                ) => {
+                    if info.message().contains("organization_members_pkey") {
+                        AppError::Conflict("user already owns an organization".to_string())
+                    } else if info.message().contains("organization_members_one_owner") {
+                        AppError::Conflict("organization already has an owner".to_string())
+                    } else {
+                        AppError::Conflict("subdomain already taken".to_string())
+                    }
+                }
                 _ => AppError::Internal,
             }
         })
+    }
+
+    /// The org a user belongs to (one per user, enforced by the members PK).
+    #[instrument(skip(self), fields(user_id = %user_id))]
+    pub async fn find_by_member(&self, user_id: Uuid) -> AppResult<Option<Organization>> {
+        use crate::schema::organization_members;
+        use crate::schema::organizations;
+        let mut conn = self.pool.get().map_err(|_| AppError::Internal)?;
+
+        organizations::table
+            .inner_join(organization_members::table)
+            .filter(organization_members::user_id.eq(user_id))
+            .select(Organization::as_select())
+            .first::<Organization>(&mut conn)
+            .optional()
+            .map_err(|e| {
+                tracing::error!("org by member: {:?}", e);
+                AppError::Internal
+            })
+    }
+
+    pub async fn find_member(
+        &self,
+        org: Uuid,
+        user: Uuid,
+    ) -> AppResult<Option<OrganizationMember>> {
+        use crate::schema::organization_members::dsl::*;
+        let mut conn = self.pool.get().map_err(|_| AppError::Internal)?;
+
+        organization_members
+            .filter(org_id.eq(org).and(user_id.eq(user)))
+            .select(OrganizationMember::as_select())
+            .first(&mut conn)
+            .optional()
+            .map_err(|e| {
+                tracing::error!("member lookup: {:?}", e);
+                AppError::Internal
+            })
     }
 
     #[instrument(skip(self), fields(subdomain = %sub))]

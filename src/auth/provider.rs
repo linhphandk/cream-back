@@ -21,6 +21,20 @@ struct Claims {
     exp: usize,
 }
 
+/// Verify a Bearer access token; returns (user_id, email).
+pub fn verify_access_token(jwt_secret: &str, token: &str) -> AppResult<(String, String)> {
+    let token_data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(jwt_secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map_err(|e| {
+        tracing::warn!("JWT decode error: {:?}", e);
+        AppError::Unauthorized("Invalid token".to_string())
+    })?;
+    Ok((token_data.claims.sub, token_data.claims.email))
+}
+
 impl LocalAuthProvider {
     pub fn new(jwt_secret: String, jwt_expiry_minutes: u64) -> Self {
         Self {
@@ -150,5 +164,22 @@ impl AuthProvider for LocalAuthProvider {
 
     fn jwt_secret(&self) -> &str {
         &self.jwt_secret
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn access_token_round_trips() {
+        let provider = LocalAuthProvider::new("test-secret".to_string(), 60);
+        let token = provider
+            .generate_access_token("11111111-1111-1111-1111-111111111111", "a@b.c")
+            .unwrap();
+        let (sub, email) = verify_access_token("test-secret", &token).unwrap();
+        assert_eq!(sub, "11111111-1111-1111-1111-111111111111");
+        assert_eq!(email, "a@b.c");
+        assert!(verify_access_token("other-secret", &token).is_err());
     }
 }

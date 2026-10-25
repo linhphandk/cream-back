@@ -43,6 +43,20 @@ impl<A: AuthProvider, U: UserRepository, S: SessionRepository> AuthService<A, U,
         })
     }
 
+    /// Access token whose sub is the DB user id (what the CurrentUser extractor resolves).
+    async fn mint_tokens(&self, user: &User) -> AppResult<Tokens> {
+        let access_token = self
+            .auth_provider
+            .generate_access_token(&user.id.to_string(), &user.email)
+            .await?;
+        let tokens = Tokens {
+            access_token,
+            expires_in: self.auth_provider.token_expiry_seconds(),
+            refresh_token: None,
+        };
+        self.with_refresh(user.id, tokens).await
+    }
+
     #[instrument(skip(self, password), fields(email = %email))]
     pub async fn register(
         &self,
@@ -67,7 +81,7 @@ impl<A: AuthProvider, U: UserRepository, S: SessionRepository> AuthService<A, U,
             return Err(AppError::Conflict("Email already registered".to_string()));
         }
 
-        let (user_info, tokens) = self
+        let (user_info, _tokens) = self
             .auth_provider
             .register(&email, &name, &password)
             .await?;
@@ -80,7 +94,8 @@ impl<A: AuthProvider, U: UserRepository, S: SessionRepository> AuthService<A, U,
         };
 
         let user = self.user_repo.create(new_user).await?;
-        let tokens = self.with_refresh(user.id, tokens).await?;
+        // remint so the token's sub is the DB user id, not the provider's throwaway id
+        let tokens = self.mint_tokens(&user).await?;
         info!(user_id = %user.id, "user registered");
         Ok((user, tokens))
     }
@@ -101,12 +116,13 @@ impl<A: AuthProvider, U: UserRepository, S: SessionRepository> AuthService<A, U,
                 AppError::BadRequest("Invalid email or password".to_string())
             })?;
 
-        let (tokens, _user_info) = self
+        let (_tokens, _user_info) = self
             .auth_provider
             .login(&email, &password, &user.password_hash)
             .await?;
 
-        let tokens = self.with_refresh(user.id, tokens).await?;
+        // remint so the token's sub is the DB user id, not the provider's throwaway id
+        let tokens = self.mint_tokens(&user).await?;
         info!(user_id = %user.id, "user logged in");
         Ok((user, tokens))
     }

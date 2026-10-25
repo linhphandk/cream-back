@@ -38,6 +38,7 @@ async fn main() {
 
     // Auth
     let auth_service = routes::auth_state(pool.clone(), &settings);
+    auth::extractor::init(settings.jwt_secret.clone());
     
     // Organizations
     let org_repo = Arc::new(organizations::repository::OrgRepository::new(pool.clone()));
