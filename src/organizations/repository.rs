@@ -157,8 +157,7 @@ impl OrgRepository {
         org_id: Uuid,
         charges_enabled: bool,
         payouts_enabled: bool,
-        onboarding_complete: bool,
-        status: &str,
+        details_submitted: bool,
     ) -> AppResult<()> {
         use crate::schema::organizations::dsl::*;
         let mut conn = self.pool.get().map_err(|_| AppError::Internal)?;
@@ -167,8 +166,7 @@ impl OrgRepository {
             .set((
                 stripe_charges_enabled.eq(charges_enabled),
                 stripe_payouts_enabled.eq(payouts_enabled),
-                stripe_onboarding_complete.eq(onboarding_complete),
-                stripe_account_status.eq(status),
+                stripe_details_submitted.eq(details_submitted),
             ))
             .execute(&mut conn)
             .map_err(|e| {
