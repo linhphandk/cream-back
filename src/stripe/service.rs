@@ -31,6 +31,18 @@ impl StripeService {
         }
     }
 
+    /// Org being onboarded/status-checked must belong to the caller.
+    /// 404 if the org doesn't exist, 403 if the caller isn't a member.
+    pub async fn assert_org_member(&self, org_id: Uuid, user_id: Uuid) -> AppResult<()> {
+        if self.org_repo.find_by_id(org_id).await?.is_none() {
+            return Err(AppError::NotFound("Organization not found".to_string()));
+        }
+        if self.org_repo.find_member(org_id, user_id).await?.is_none() {
+            return Err(AppError::Forbidden("not a member of this organization".to_string()));
+        }
+        Ok(())
+    }
+
     /// Create Stripe Connect account and onboarding session for an organization
     pub async fn create_onboarding(
         &self,

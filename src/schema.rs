@@ -68,6 +68,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    organization_members (user_id) {
+        org_id -> Uuid,
+        user_id -> Uuid,
+        role -> Text,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     stripe_webhook_events (id) {
         id -> Uuid,
         stripe_event_id -> Text,
@@ -79,5 +88,6 @@ diesel::table! {
 
 diesel::joinable!(campaigns -> organizations (organization_id));
 diesel::joinable!(donations -> campaigns (campaign_id));
+diesel::joinable!(organization_members -> organizations (org_id));
 
-diesel::allow_tables_to_appear_in_same_query!(organizations, campaigns, donations, users, sessions, stripe_webhook_events);
+diesel::allow_tables_to_appear_in_same_query!(organizations, campaigns, donations, users, sessions, stripe_webhook_events, organization_members);

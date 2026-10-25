@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::stripe::service::StripeService;
 use crate::shared::errors::{AppError, AppResult};
+use crate::auth::extractor::CurrentUser;
 use crate::stripe::models::{CreateStripeAccountRequest, CreateDonationRequest, EntityType};
 
 pub type StripeState = std::sync::Arc<StripeService>;
@@ -42,11 +43,13 @@ pub struct OnboardingStatusResponse {
 }
 
 /// Create Stripe Connect account and return onboarding URL
-#[tracing::instrument(skip(state, req), fields(org_id = %req.org_id))]
+#[tracing::instrument(skip(state, req, user), fields(org_id = %req.org_id, user_id = %user.id))]
 pub async fn create_onboarding(
     State(state): State<StripeState>,
+    user: CurrentUser,
     Json(req): Json<CreateOnboardingRequest>,
 ) -> AppResult<(StatusCode, Json<CreateOnboardingResponse>)> {
+    state.assert_org_member(req.org_id, user.id).await?;
     let (account_id, onboarding_url) = state.create_onboarding(req.org_id, req.entity_type, req.country).await?;
     
     Ok((StatusCode::CREATED, Json(CreateOnboardingResponse {
@@ -58,8 +61,10 @@ pub async fn create_onboarding(
 /// Check Stripe onboarding status
 pub async fn onboarding_status(
     State(state): State<StripeState>,
+    user: CurrentUser,
     Path(org_id): Path<Uuid>,
 ) -> AppResult<Json<OnboardingStatusResponse>> {
+    state.assert_org_member(org_id, user.id).await?;
     let status = state.check_onboarding_status(org_id).await?;
     
     Ok(Json(OnboardingStatusResponse {
@@ -75,8 +80,10 @@ pub async fn onboarding_status(
 /// Refresh onboarding link (generate new session)
 pub async fn refresh_onboarding(
     State(state): State<StripeState>,
+    user: CurrentUser,
     Path(org_id): Path<Uuid>,
 ) -> AppResult<Json<CreateOnboardingResponse>> {
+    state.assert_org_member(org_id, user.id).await?;
     let org = state.org_repo.find_by_id(org_id).await?
         .ok_or_else(|| AppError::NotFound("Organization not found".to_string()))?;
 
