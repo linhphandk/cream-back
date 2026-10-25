@@ -101,16 +101,9 @@ impl StripeService {
 
         let onboarding_complete = charges_enabled && payouts_enabled && details_submitted;
 
-        // Update org status
-        let status = if onboarding_complete {
-            "active"
-        } else if details_submitted {
-            "pending"
-        } else {
-            "incomplete"
-        };
-        
-        self.org_repo.update_stripe_status(org_id, charges_enabled, payouts_enabled, onboarding_complete, status).await?;
+        self.org_repo
+            .update_stripe_status(org_id, charges_enabled, payouts_enabled, details_submitted)
+            .await?;
 
         Ok(StripeOnboardingStatus {
             account_id,
