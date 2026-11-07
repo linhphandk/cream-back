@@ -14,10 +14,18 @@ pub struct Organization {
     pub stripe_account_id: Option<String>,
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
-    pub stripe_onboarding_complete: Option<bool>,
     pub stripe_charges_enabled: Option<bool>,
     pub stripe_payouts_enabled: Option<bool>,
-    pub stripe_account_status: Option<String>,
+    pub stripe_details_submitted: Option<bool>,
+}
+
+impl Organization {
+    /// Cached Stripe view says the account can fully operate.
+    pub fn stripe_complete(&self) -> bool {
+        self.stripe_charges_enabled.unwrap_or(false)
+            && self.stripe_payouts_enabled.unwrap_or(false)
+            && self.stripe_details_submitted.unwrap_or(false)
+    }
 }
 
 #[derive(Insertable)]

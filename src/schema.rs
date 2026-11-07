@@ -7,10 +7,9 @@ diesel::table! {
         stripe_account_id -> Nullable<Text>,
         created_at -> Nullable<Timestamptz>,
         updated_at -> Nullable<Timestamptz>,
-        stripe_onboarding_complete -> Nullable<Bool>,
         stripe_charges_enabled -> Nullable<Bool>,
         stripe_payouts_enabled -> Nullable<Bool>,
-        stripe_account_status -> Nullable<Text>,
+        stripe_details_submitted -> Nullable<Bool>,
     }
 }
 

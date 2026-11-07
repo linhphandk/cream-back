@@ -140,30 +140,45 @@ pub async fn onboarding_return(
     }
 }
 
-/// Create a donation PaymentIntent
+/// Create a donation Checkout Session, return the hosted redirect URL
 #[tracing::instrument(skip(state, req), fields(subdomain = %subdomain))]
 pub async fn create_donation(
     State(state): State<StripeState>,
     Path(subdomain): Path<String>,
     Json(req): Json<CreateDonationRequest>,
 ) -> AppResult<(StatusCode, Json<crate::stripe::models::CreateDonationResponse>)> {
-    let (client_secret, donation_id, payment_intent_id, platform_fee_cents) = 
-        state.create_donation_payment_intent(&subdomain, req).await?;
+    let (checkout_url, donation_id) = state.create_donation_checkout(&subdomain, req).await?;
 
     Ok((StatusCode::CREATED, Json(crate::stripe::models::CreateDonationResponse {
-        client_secret,
+        checkout_url,
         donation_id,
-        payment_intent_id,
     })))
 }
 
 /// Get donation status
 pub async fn donation_status(
     State(state): State<StripeState>,
-    Path(donation_id): Path<Uuid>,
+    Path((subdomain, donation_id)): Path<(String, Uuid)>,
 ) -> AppResult<Json<crate::stripe::models::DonationStatusResponse>> {
-    // TODO: Implement donation status lookup from database
-    Err(AppError::Internal)
+    let status = state.donation_status(&subdomain, donation_id).await?;
+    Ok(Json(status))
+}
+
+/// Stripe webhook: signature-verified, deduped, updates donation status
+pub async fn stripe_webhook(
+    State(state): State<StripeState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> AppResult<StatusCode> {
+    let signature = headers
+        .get("stripe-signature")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AppError::BadRequest("Missing stripe-signature header".to_string()))?;
+
+    let event = state.client.verify_webhook(&body, signature)?;
+    state.process_webhook_event(&event).await?;
+
+    Ok(StatusCode::OK)
 }
 
 pub fn router(state: StripeState) -> Router {
@@ -174,5 +189,6 @@ pub fn router(state: StripeState) -> Router {
         .route("/onboarding/stripe/return", get(onboarding_return))
         .route("/orgs/{subdomain}/donate", post(create_donation))
         .route("/orgs/{subdomain}/donate/{donation_id}", get(donation_status))
+        .route("/stripe/webhook", post(stripe_webhook))
         .with_state(state)
 }

@@ -41,7 +41,7 @@ pub struct PublicOrgResponse {
     pub id: Uuid,
     pub name: String,
     pub subdomain: String,
-    pub stripe_onboarding_complete: Option<bool>,
+    pub stripe_onboarding_complete: bool,
 }
 
 /// Public org info for the donate page.
@@ -54,11 +54,12 @@ pub async fn public_org(
         .org_by_subdomain(&sub)
         .await?
         .ok_or_else(|| AppError::NotFound("organization not found".to_string()))?;
+    let complete = org.stripe_complete();
     Ok(Json(PublicOrgResponse {
         id: org.id,
         name: org.name,
         subdomain: org.subdomain,
-        stripe_onboarding_complete: org.stripe_onboarding_complete,
+        stripe_onboarding_complete: complete,
     }))
 }
 

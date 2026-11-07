@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod donations;
 mod onboarding;
 mod organizations;
 mod routes;
@@ -50,11 +51,12 @@ async fn main() {
     );
     
     // Stripe service
+    let donation_repo = Arc::new(donations::repository::DonationRepository::new(pool.clone()));
     let stripe_service = Arc::new(stripe::service::StripeService::new(
         stripe_client,
         org_repo,
+        donation_repo,
         settings.frontend_base_url.clone(),
-        settings.platform_fee_bps,
     ));
 
     let app = routes::routes(auth_service, onboarding, stripe_service);

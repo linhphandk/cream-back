@@ -57,12 +57,11 @@ pub struct CreateDonationRequest {
     pub metadata: Option<serde_json::Value>,
 }
 
-/// Response from creating a donation PaymentIntent
+/// Response from creating a donation Checkout Session
 #[derive(Debug, Serialize)]
 pub struct CreateDonationResponse {
-    pub client_secret: String,
+    pub checkout_url: String,
     pub donation_id: Uuid,
-    pub payment_intent_id: String,
 }
 
 /// Donation status response
