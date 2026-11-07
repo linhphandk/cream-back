@@ -138,6 +138,21 @@ impl OrgRepository {
             })
     }
 
+    /// The org's silent default campaign (one per org by construction).
+    pub async fn find_campaign_by_org(&self, org_id: Uuid) -> AppResult<Option<Campaign>> {
+        use crate::schema::campaigns::dsl::*;
+        let mut conn = self.pool.get().map_err(|_| AppError::Internal)?;
+
+        campaigns
+            .filter(organization_id.eq(org_id))
+            .first::<Campaign>(&mut conn)
+            .optional()
+            .map_err(|e| {
+                tracing::error!("campaign by org: {:?}", e);
+                AppError::Internal
+            })
+    }
+
     pub async fn update_stripe_account_id(&self, org_id: Uuid, account_id: String) -> AppResult<()> {
         use crate::schema::organizations::dsl::*;
         let mut conn = self.pool.get().map_err(|_| AppError::Internal)?;

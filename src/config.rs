@@ -16,12 +16,9 @@ pub struct Settings {
     pub stripe_api_version: String,
     #[serde(default = "default_frontend_base")]
     pub frontend_base_url: String,
-    #[serde(default = "default_platform_fee_bps")]
-    pub platform_fee_bps: i32,
 }
 
 fn default_jwt_expiry() -> u32 { 15 }
 fn default_pool() -> u32 { 10 }
 fn default_stripe_api_version() -> String { "2026-09-30.preview".to_string() }
 fn default_frontend_base() -> String { "http://localhost:3000".to_string() }
-fn default_platform_fee_bps() -> i32 { 500 }

@@ -49,11 +49,21 @@ impl StripeClient {
         HeaderValue::from_str(&auth).unwrap()
     }
 
-    async fn post_v1_form<T: for<'de> Deserialize<'de>>(&self, path: &str, form: &[(&str, &str)]) -> AppResult<T> {
+    async fn post_v1_form<T: for<'de> Deserialize<'de>>(
+        &self,
+        path: &str,
+        form: &[(&str, &str)],
+        stripe_account: Option<&str>,
+    ) -> AppResult<T> {
         let url = format!("{}{}", STRIPE_API_BASE_V1, path);
-        let response = self.http
+        let mut req = self.http
             .post(&url)
-            .header(AUTHORIZATION, self.auth_header_v1())
+            .header(AUTHORIZATION, self.auth_header_v1());
+        // Direct charge on a connected account: session is created on the account itself.
+        if let Some(account) = stripe_account {
+            req = req.header(HeaderName::from_static("stripe-account"), HeaderValue::from_str(account).map_err(|_| AppError::Internal)?);
+        }
+        let response = req
             .form(form)
             .send()
             .await
@@ -193,7 +203,9 @@ impl StripeClient {
 
     // ============ v1 PaymentIntent APIs ============
 
-    pub async fn create_payment_intent(
+    /// Create a hosted Checkout Session for a donation on the org's connected
+    /// account. Direct charge: platform fee via payment_intent_data.
+    pub async fn create_checkout_session(
         &self,
         amount_cents: i64,
         currency: &str,
@@ -201,40 +213,35 @@ impl StripeClient {
         connected_account_id: &str,
         donation_id: Uuid,
         org_id: Uuid,
+        org_name: &str,
         donor_email: Option<&str>,
-        donor_name: Option<&str>,
-        metadata: Option<&Value>,
-    ) -> AppResult<CreatePaymentIntentResponse> {
-        // Build owned strings first
+        success_url: &str,
+        cancel_url: &str,
+    ) -> AppResult<CheckoutSessionResponse> {
+        // shortcut: single price_data line item, no donor_name on the Stripe form — collect donor details on our page only
         let mut form_owned: Vec<(String, String)> = vec![
-            ("amount".to_string(), amount_cents.to_string()),
-            ("currency".to_string(), currency.to_string()),
-            ("application_fee_amount".to_string(), platform_fee_cents.to_string()),
-            ("on_behalf_of".to_string(), connected_account_id.to_string()),
-            ("automatic_payment_methods[enabled]".to_string(), "true".to_string()),
-            ("metadata[cream_org_id]".to_string(), org_id.to_string()),
+            ("mode".to_string(), "payment".to_string()),
+            ("submit_type".to_string(), "donate".to_string()),
+            ("line_items[0][quantity]".to_string(), "1".to_string()),
+            ("line_items[0][price_data][currency]".to_string(), currency.to_string()),
+            ("line_items[0][price_data][unit_amount]".to_string(), amount_cents.to_string()),
+            ("line_items[0][price_data][product_data][name]".to_string(), format!("Donation to {}", org_name)),
+            ("payment_intent_data[application_fee_amount]".to_string(), platform_fee_cents.to_string()),
             ("metadata[cream_donation_id]".to_string(), donation_id.to_string()),
+            ("metadata[cream_org_id]".to_string(), org_id.to_string()),
+            ("success_url".to_string(), success_url.to_string()),
+            ("cancel_url".to_string(), cancel_url.to_string()),
         ];
 
         if let Some(email) = donor_email {
-            form_owned.push(("receipt_email".to_string(), email.to_string()));
-            form_owned.push(("metadata[cream_donor_email]".to_string(), email.to_string()));
-        }
-        if let Some(name) = donor_name {
-            form_owned.push(("metadata[cream_donor_name]".to_string(), name.to_string()));
-        }
-        if let Some(m) = metadata {
-            if let Some(obj) = m.as_object() {
-                for (k, v) in obj {
-                    form_owned.push((format!("metadata[{}]", k), v.to_string()));
-                }
-            }
+            form_owned.push(("customer_email".to_string(), email.to_string()));
         }
 
-        // Convert to references for the form call
         let form_refs: Vec<(&str, &str)> = form_owned.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
 
-        let resp: CreatePaymentIntentResponse = self.post_v1_form("/payment_intents", &form_refs).await?;
+        let resp: CheckoutSessionResponse = self
+            .post_v1_form("/checkout/sessions", &form_refs, Some(connected_account_id))
+            .await?;
         Ok(resp)
     }
 
@@ -351,10 +358,8 @@ pub struct CapabilityStatus {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreatePaymentIntentResponse {
+pub struct CheckoutSessionResponse {
     pub id: String,
-    pub client_secret: String,
-    pub status: String,
-    pub amount: i64,
-    pub currency: String,
+    pub url: Option<String>,
 }
+
